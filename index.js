@@ -1,4 +1,4 @@
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const express = require("express");
 const app = express();
 
@@ -16,13 +16,55 @@ const client = new MongoClient(uri, {
   serverApi: ServerApiVersion.v1,
 });
 
+function verifyJWT(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).send({ message: "Unauthorized access" });
+  }
+  const token = authHeader.split(" ")[1];
+  jwt.verify(token, process.env.SECRET_ACCESS_TOKEN, function (err, decoded) {
+    if (err) {
+      return res.status(403).send({ message: "Forbidden access" });
+    }
+    req.decoded = decoded;
+    next();
+  });
+}
+
 async function run() {
   try {
     await client.connect();
     const usersCollection = client.db("airbnb-app").collection("users");
+    const reserveCollection = client.db("airbnb-app").collection("reserves");
+    const reviewsCollection = client.db("airbnb-app").collection("reviews");
     const propertiesCollection = client
       .db("airbnb-app")
       .collection("properties");
+
+    app.get("/properties", async (req, res) => {
+      const properties = await propertiesCollection.find({}).toArray();
+      res.send(properties);
+    });
+
+    app.get("/reserve/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const property = await propertiesCollection.findOne(query);
+      res.send(property);
+    });
+
+    app.get("/reserve", async (req, res) => {
+      const email = req.query.email;
+      const query = { customerEmail: email };
+      const orders = await reserveCollection.find(query).toArray();
+      return res.send(orders);
+    });
+
+    app.post("/reserve", async (req, res) => {
+      const reserve = req.body;
+      const result = await reserveCollection.insertOne(reserve);
+      res.send({ success: true, result });
+    });
 
     app.put("/user/:email", async (req, res) => {
       const email = req.params.email;
@@ -44,11 +86,26 @@ async function run() {
       );
       res.send({ result, token });
     });
+
+    app.post("/review", async (req, res) => {
+      const review = req.body;
+      const result = await reviewsCollection.insertOne(review);
+      res.send(result);
+    });
+    app.get("/review/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { propertyId: id };
+      const reviews = await reviewsCollection.find(query).toArray();
+      res.send(reviews);
+    });
   } finally {
   }
 }
 run().catch(console.dir);
 
+app.get("/", (req, res) => {
+  res.send("Running airbnb app");
+});
 app.listen(port, () => {
   console.log(`Listening on port ${port}`);
 });
