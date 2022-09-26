@@ -42,8 +42,21 @@ async function run() {
       .collection("properties");
 
     app.get("/properties", async (req, res) => {
-      const properties = await propertiesCollection.find({}).toArray();
-      res.send(properties);
+      const resultsQuery = req.query;
+      const { query, page } = resultsQuery;
+      if (query) {
+        const properties = await propertiesCollection.find({}).toArray();
+        const filteredData = properties?.filter((property) =>
+          property.fields.property_type.toLowerCase().includes(query)
+        );
+        res.send(filteredData);
+      } else {
+        const properties = await propertiesCollection
+          .find({})
+          .limit(parseInt(page))
+          .toArray();
+        res.send(properties);
+      }
     });
 
     app.get("/reserve/:id", async (req, res) => {
